@@ -1,0 +1,5 @@
+checkpoint/
+DATA/
+lightning_logs/
+logs/
+octmnist/
