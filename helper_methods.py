@@ -1,7 +1,68 @@
-import os, torch, random, glob
+import os, torch, random, glob, shutil
 import torch.nn.functional as F
 import numpy as np
 import pandas as pd
+from datetime import datetime
+
+def copy_files_with_limit(source_dir, destination_dir, limit):
+    # Create the destination directory if it doesn't exist
+    if not os.path.exists(destination_dir):
+        os.makedirs(destination_dir)
+
+    # Get the list of directories in the source directory
+    subdirectories = [d for d in os.listdir(source_dir) if os.path.isdir(os.path.join(source_dir, d))]
+
+    all_files = []
+    new_subdir = "result"
+
+    # Create corresponding directory in the destination folder
+    destination_subdir = os.path.join(destination_dir, new_subdir)
+    if not os.path.exists(destination_subdir):
+        os.makedirs(destination_subdir)
+
+    # Iterate over each subdirectory
+    for subdir in subdirectories:
+        source_subdir = os.path.join(source_dir, subdir)
+
+        # Get the list of files in the subdirectory
+        files = glob.glob(source_subdir + "/*")
+        all_files.extend(files)
+    
+    random.shuffle(all_files)
+
+    # Iterate over files in the subdirectory
+    files_copied = 0
+    for filename in all_files:
+        local_filename = filename.split("/")[-1]
+        destination_file = os.path.join(destination_subdir, local_filename)
+
+        # Check if the file already exists in the destination directory
+        if os.path.exists(destination_file):
+            # If the file already exists, rename it
+            new_filename = local_filename.split('.')[0] + "_copy." + local_filename.split('.')[1]
+            destination_file = os.path.join(destination_subdir, new_filename)
+
+        # Copy the file
+        shutil.copy2(filename, destination_file)
+        files_copied += 1
+
+        # Break if the limit is reached
+        if files_copied == limit:
+            break
+
+def create_folder_with_timestamp(filename):
+    # Get current date and time
+    current_datetime = datetime.now()
+    
+    # Format the date and time as a string (e.g., "2024-02-25_145930")
+    timestamp = current_datetime.strftime("%Y-%m-%d_%H")
+    
+    # Create folder name using the timestamp
+    folder_name = f"{filename}_{timestamp}"
+    
+    # Create the new folder
+    os.makedirs(folder_name)
+    return folder_name
 
 def count_folders(folder_name):
     try:

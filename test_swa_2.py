@@ -22,21 +22,22 @@ import sys
 from model_loaders import *
 from helper_methods import *
 
-
-num_workers = 8
-batch_size = 512
+num_workers = int(os.cpu_count() / 2)
+batch_size = 256 if torch.cuda.is_available() else 64
 memory_bank_size = 4096
 seed = 1
-max_epochs = 200
+finetuning_epochs = 40
+self_supervised_epochs = 100
+
+dataset_name = "pneumoniamnist"
+dataset_folder_path = f"./DATA/MedMNIST/{dataset_name}"
 
 # path_to_train_self_supervised = "./DATA/CIFAR10/train_self_sup/"
-# path_to_train_self_supervised = "./DATA/octmnist/train_self_sup/"
-path_to_train_self_supervised = "./DATA/octmnist/train/"
-path_to_train_classifier = "./DATA/octmnist/train/"
-path_to_val = "./DATA/octmnist/val/"
-path_to_test = "./DATA/octmnist/test/"
 
-
+path_to_train_classifier = f"{dataset_folder_path}/train/"
+path_to_train_self_supervised = path_to_train_classifier # Train with same as training data
+path_to_val = f"{dataset_folder_path}/test/"
+path_to_test = f"{dataset_folder_path}/test/"
 
 # pl.seed_everything(seed)
 
@@ -69,15 +70,6 @@ test_transforms = torchvision.transforms.Compose(
             std=utils.IMAGENET_NORMALIZE["std"],
         ),
     ]
-)
-
-cifar10_dm = CIFAR10DataModule(
-    data_dir=path_to_train_classifier,
-    batch_size=BATCH_SIZE,
-    num_workers=num_workers,
-    train_transforms=train_classifier_transforms,
-    test_transforms=test_transforms,
-    val_transforms=test_transforms,
 )
 
 # We use the moco augmentations for training moco
@@ -128,35 +120,18 @@ dataloader_test = torch.utils.data.DataLoader(
     num_workers=num_workers,
 )
     
-model = MocoModel(max_epochs=max_epochs)
-trainer = pl.Trainer(max_epochs=max_epochs, devices=1, accelerator="gpu")
+model = MocoModel(max_epochs=self_supervised_epochs)
+trainer = pl.Trainer(max_epochs=self_supervised_epochs, devices=1, accelerator="gpu")
 trainer.fit(model, dataloader_train_moco)
 
 # model.eval()
-# classifier = LitResnet(backbone=model.backbone, data_loader=dataloader_train_classifier, num_classes=count_folders(path_to_test))
-
-classifier = SWAResnet(model.backbone, dataloader_train_classifier, num_classes=count_folders(path_to_test), lr=0.01)
-# classifier.datamodule = cifar10_dm
-
-swa_trainer = pl.Trainer(
-    max_epochs=max_epochs,
-    accelerator="auto",
-    devices=1 if torch.cuda.is_available() else None,  # limiting got iPython runs
-    # callbacks=[TQDMProgressBar(refresh_rate=20)],
-    # logger=CSVLogger(save_dir="logs/"),
-
-)
-
-swa_trainer.fit(classifier, dataloader_train_classifier)
-swa_trainer.test(ckpt_path='best', dataloaders=dataloader_test)
-
-# print(classifier.model)
+classifier = LitResnet(backbone=model.backbone, data_loader=dataloader_train_classifier, num_classes=count_folders(path_to_test))
 
 # Save the classifier model
 # torch.save(classifier.state_dict(), 'classifier_model.pth')
 
-# trainer = pl.Trainer(max_epochs=max_epochs, devices=1, accelerator="gpu")
-# trainer.fit(classifier, dataloader_train_classifier, dataloader_val)
+trainer = pl.Trainer(max_epochs=finetuning_epochs, devices=1, accelerator="gpu")
+trainer.fit(classifier, dataloader_train_classifier, dataloader_val)
 
 # # test (pass in the loader)
-# trainer.test(dataloaders=dataloader_test)
+trainer.test(dataloaders=dataloader_test)

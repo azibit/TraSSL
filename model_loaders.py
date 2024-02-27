@@ -306,17 +306,54 @@ class LitResnet(LightningModule):
         }
         return {"optimizer": optimizer, "lr_scheduler": scheduler_dict}
     
-class SWAResnet(LitResnet):
+class SWAResnet(LightningModule):
     def __init__(self, backbone, data_loader, num_classes=10, lr=0.01):
-        super().__init__(backbone, data_loader, lr=lr, num_classes=10)
+        super().__init__()
 
-        self.save_hyperparameters("lr")
+        self.save_hyperparameters()
+        # super().__init__(backbone, data_loader, lr=lr, num_classes=num_classes)
+
+        # self.save_hyperparameters("lr")
+        self.num_classes = num_classes
+        self.backbone = backbone
+        self.data_loader = data_loader
+
+        # create a linear layer for our downstream classification model
+        self.fc = nn.Linear(512, num_classes)
+        # self.model = torchvision.models.resnet18(pretrained=False, num_classes=self.num_classes)
+
+        # Combine the backbone and the fully connected layer into a sequential block
+        self.model = nn.Sequential(
+            self.backbone,
+            nn.AdaptiveAvgPool2d(1),  # Ensure the output size is (batch_size, 512, 1, 1)
+            nn.Flatten(),             # Flatten the feature map to (batch_size, 512)
+            self.fc
+        )
         # self.model = backbone
         self.swa_model = AveragedModel(self.model)
 
     def forward(self, x):
         out = self.swa_model(x)
         return F.log_softmax(out, dim=1)
+    
+    def training_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self(x)
+        loss = F.nll_loss(logits, y)
+        self.log("train_loss", loss)
+        return loss
+
+    def evaluate(self, batch, stage=None):
+        x, y, _ = batch
+        logits = self(x)
+        loss = F.nll_loss(logits, y)
+        preds = torch.argmax(logits, dim=1)
+        task = "MULTICLASS"  # Example task argument, replace with your actual task
+        acc = accuracy(preds, y, task, num_classes=self.num_classes)
+
+        if stage:
+            self.log(f"{stage}_loss", loss, prog_bar=True)
+            self.log(f"{stage}_acc", acc, prog_bar=True)
 
     def training_epoch_end(self, training_step_outputs):
         self.swa_model.update_parameters(self.model)
@@ -330,6 +367,9 @@ class SWAResnet(LitResnet):
 
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", acc, prog_bar=True)
+
+    def test_step(self, batch, batch_idx):
+        self.evaluate(batch, "test")
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr, momentum=0.9, weight_decay=5e-4)

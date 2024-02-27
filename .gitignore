@@ -1,5 +1,5 @@
 checkpoint/
-DATA/
 lightning_logs/
 logs/
 octmnist/
+DATA/

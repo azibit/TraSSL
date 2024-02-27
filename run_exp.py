@@ -22,6 +22,19 @@ import sys
 from model_loaders import *
 from helper_methods import *
 
+import argparse
+
+parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+parser.add_argument('--DATASET_NAME', required=True, help='Name of the dataset')
+parser.add_argument('--TRAINING_OPTION', type=int, required=True, help='Option to use for running the experiment')
+parser.add_argument('--TRANSFER_DATASET_NAME', default="", required=False, help='The transfer dataset to use')
+# Option 1 - Standard Training
+# Option 2 - Self Supervised Training
+# Option 3 - Self-Supervised Training with Transfer Data
+# parser.add_argument('--sort_order', type=int, default=-1, help='Sort order (default: -1)')
+
+args = parser.parse_args()
+
 num_workers = int(os.cpu_count() / 2)
 batch_size = 256 if torch.cuda.is_available() else 64
 memory_bank_size = 4096
@@ -29,13 +42,35 @@ seed = 1
 finetuning_epochs = 40
 self_supervised_epochs = 100
 
-dataset_name = "dermamnist"
-dataset_folder_path = f"./DATA/MedMNIST/{dataset_name}"
+dataset_name = args.DATASET_NAME # "pneumoniamnist"
+training_option = args.TRAINING_OPTION
+transfer_dataset_name = args.TRANSFER_DATASET_NAME
 
-path_to_train_self_supervised = f"{dataset_folder_path}/train_self_sup/"
-path_to_train_classifier = f"{dataset_folder_path}/train/"
-path_to_val = f"{dataset_folder_path}/test/"
+
+dataset_folder_path = f"./DATA/MedMNIST/{dataset_name}"
+# path_to_train_self_supervised = "./DATA/CIFAR10/train_self_sup/"
+
+path_to_val = f"{dataset_folder_path}/val/"
 path_to_test = f"{dataset_folder_path}/test/"
+path_to_train_classifier = f"{dataset_folder_path}/train/"
+path_to_train_self_supervised = path_to_train_classifier # Train with same as training data
+
+if training_option == 3:
+    if transfer_dataset_name:
+        path_to_train_self_supervised = f"{dataset_folder_path}/{dataset_name}_{transfer_dataset_name}/"
+        path_to_train_data_for_transfer_dataset = f"./DATA/MedMNIST/{transfer_dataset_name}/train"
+
+        # Copy the train of the dataset and the transfer dataset into a new folder inside of the dataset folder
+        #1. Create new folder with name - path_to_train_self_supervised
+        #2. Copy files from  path_to_train_classifier into the new folder - path_to_train_self_supervised
+        #3. Copy files from path_to_train_data_for_transfer_dataset into the new folder - path_to_train_self_supervised
+        #4. If folder names are duplicated, rename the files or folders so that all are copied
+        #5. Before copying, specify a number of files to copy from each folder into the new folder
+        copy_files_with_limit(path_to_train_classifier, path_to_train_self_supervised, 0) # Original dataset
+        copy_files_with_limit(path_to_train_data_for_transfer_dataset, path_to_train_self_supervised, 0) # Transfer dataset
+
+    else:
+        path_to_train_self_supervised = f"{dataset_folder_path}/train_self_sup/" # Train with same as training data
 
 # pl.seed_everything(seed)
 
@@ -119,8 +154,10 @@ dataloader_test = torch.utils.data.DataLoader(
 )
     
 model = MocoModel(max_epochs=self_supervised_epochs)
-trainer = pl.Trainer(max_epochs=self_supervised_epochs, devices=1, accelerator="gpu")
-trainer.fit(model, dataloader_train_moco)
+
+if training_option != 1:
+    trainer = pl.Trainer(max_epochs=self_supervised_epochs, devices=1, accelerator="gpu")
+    trainer.fit(model, dataloader_train_moco)
 
 # model.eval()
 classifier = LitResnet(backbone=model.backbone, data_loader=dataloader_train_classifier, num_classes=count_folders(path_to_test))

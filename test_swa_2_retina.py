@@ -29,11 +29,13 @@ seed = 1
 finetuning_epochs = 40
 self_supervised_epochs = 100
 
-dataset_name = "dermamnist"
+dataset_name = "retinamnist"
 dataset_folder_path = f"./DATA/MedMNIST/{dataset_name}"
 
-path_to_train_self_supervised = f"{dataset_folder_path}/train_self_sup/"
+# path_to_train_self_supervised = "./DATA/CIFAR10/train_self_sup/"
+
 path_to_train_classifier = f"{dataset_folder_path}/train/"
+path_to_train_self_supervised = path_to_train_classifier # Train with same as training data
 path_to_val = f"{dataset_folder_path}/test/"
 path_to_test = f"{dataset_folder_path}/test/"
 

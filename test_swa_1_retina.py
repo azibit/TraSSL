@@ -29,7 +29,7 @@ seed = 1
 finetuning_epochs = 40
 self_supervised_epochs = 100
 
-dataset_name = "dermamnist"
+dataset_name = "retinamnist"
 dataset_folder_path = f"./DATA/MedMNIST/{dataset_name}"
 
 path_to_train_self_supervised = f"{dataset_folder_path}/train_self_sup/"
@@ -70,9 +70,6 @@ test_transforms = torchvision.transforms.Compose(
     ]
 )
 
-# We use the moco augmentations for training moco
-dataset_train_moco = LightlyDataset(input_dir=path_to_train_self_supervised, transform=transform)
-
 # Since we also train a linear classifier on the pre-trained moco model we
 # reuse the test augmentations here (MoCo augmentations are very strong and
 # usually reduce accuracy of models which are not used for contrastive learning.
@@ -85,14 +82,6 @@ dataset_train_classifier = LightlyDataset(
 dataset_val = LightlyDataset(input_dir=path_to_val, transform=test_transforms)
 
 dataset_test = LightlyDataset(input_dir=path_to_test, transform=test_transforms)
-
-dataloader_train_moco = torch.utils.data.DataLoader(
-    dataset_train_moco,
-    batch_size=batch_size,
-    shuffle=True,
-    drop_last=True,
-    num_workers=num_workers,
-)
 
 dataloader_train_classifier = torch.utils.data.DataLoader(
     dataset_train_classifier,
@@ -119,10 +108,6 @@ dataloader_test = torch.utils.data.DataLoader(
 )
     
 model = MocoModel(max_epochs=self_supervised_epochs)
-trainer = pl.Trainer(max_epochs=self_supervised_epochs, devices=1, accelerator="gpu")
-trainer.fit(model, dataloader_train_moco)
-
-# model.eval()
 classifier = LitResnet(backbone=model.backbone, data_loader=dataloader_train_classifier, num_classes=count_folders(path_to_test))
 
 # Save the classifier model
